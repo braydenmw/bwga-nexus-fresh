@@ -1,0 +1,7 @@
+{
+  "name": "BWGA Nexus AI",
+  "description": "A modern, AI-powered web application that generates strategic intelligence blueprints for economic development, investment, and government-to-government (G2G) cooperation using the Gemini API.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

@@ -3,6 +3,7 @@ import type { ReportParameters } from '../types.ts';
 
 const AUTOSAVE_KEY = 'nexusAutosaveReportParams';
 const SAVED_REPORTS_KEY = 'nexusSavedReports';
+const USER_PROFILE_KEY = 'nexusUserProfile';
 
 // --- Auto-Save Functionality ---
 
@@ -29,6 +30,34 @@ export const clearAutoSave = (): void => {
         localStorage.removeItem(AUTOSAVE_KEY);
     } catch (e) {
         console.error("Failed to clear auto-saved work:", e);
+    }
+};
+
+// --- User Profile Persistence ---
+
+export const saveUserProfile = (profile: { userName: string; userDepartment: string; organizationType: string; userCountry: string; userTier?: string; governmentLevel?: string }): void => {
+    try {
+        localStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profile));
+    } catch (e) {
+        console.error("Failed to save user profile:", e);
+    }
+};
+
+export const loadUserProfile = (): { userName: string; userDepartment: string; organizationType: string; userCountry: string; userTier?: string; governmentLevel?: string } | null => {
+    try {
+        const data = localStorage.getItem(USER_PROFILE_KEY);
+        return data ? JSON.parse(data) : null;
+    } catch (e) {
+        console.error("Failed to load user profile:", e);
+        return null;
+    }
+};
+
+export const clearUserProfile = (): void => {
+    try {
+        localStorage.removeItem(USER_PROFILE_KEY);
+    } catch (e) {
+        console.error("Failed to clear user profile:", e);
     }
 };
 

@@ -3,7 +3,7 @@ import React, { useMemo, useEffect, useRef, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { jsPDF } from 'jspdf';
 import { marked } from 'marked';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas'; 
 import type { ReportParameters, SymbiosisContext } from '../types.ts';
 import { DownloadIcon, LetterIcon, NexusLogo } from './Icons.tsx';
 import Card from './common/Card.tsx';
@@ -17,6 +17,35 @@ interface ReportViewerProps {
   onStartSymbiosis: (context: SymbiosisContext) => void;
   onGenerateLetter: () => void;
   error: string | null;
+  wizardStep?: number;
+  onNextStep?: () => void;
+  onPrevStep?: () => void;
+  canGoNext?: boolean;
+  canGoPrev?: boolean;
+}
+
+// New: ReportCard component for the dashboard layout
+const ReportCard: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode; className?: string }> = ({ title, icon, children, className = '' }) => (
+    <div className={`bg-nexus-surface-800 border border-nexus-border-medium rounded-xl shadow-lg flex flex-col ${className}`}>
+        <header className="p-4 border-b border-nexus-border-medium flex items-center gap-3 bg-nexus-surface-900/50 rounded-t-xl">
+            <div className="flex-shrink-0 w-8 h-8 bg-nexus-accent-cyan/10 text-nexus-accent-cyan rounded-lg flex items-center justify-center">
+                {icon}
+            </div>
+            <h3 className="font-bold text-nexus-text-primary text-lg">{title}</h3>
+        </header>
+        <div className="p-4 md:p-6 flex-grow">
+            {children}
+        </div>
+    </div>
+);
+
+// New: Icon mapping for different report sections
+const SECTION_ICONS: Record<string, React.ReactNode> = {
+    'executive_summary': <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+    'risk_map': <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+    'match_making_analysis': <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
+    'source_attribution': <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>,
+    'default': <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
 }
 
 const NsilChart: React.FC<{ jsonString: string }> = ({ jsonString }) => {
@@ -135,14 +164,19 @@ const ReportLoadingIndicator: React.FC = () => {
 };
 
 
-const ReportViewer: React.FC<ReportViewerProps> = ({ 
-    content, 
+const ReportViewer: React.FC<ReportViewerProps> = ({
+    content,
     parameters,
-    isGenerating, 
+    isGenerating,
     onReset,
     onStartSymbiosis,
     onGenerateLetter,
     error,
+    wizardStep,
+    onNextStep,
+    onPrevStep,
+    canGoNext,
+    canGoPrev,
 }) => {
   const reportContainerRef = useRef<HTMLDivElement>(null);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -229,113 +263,168 @@ const ReportViewer: React.FC<ReportViewerProps> = ({
   const reportParts = useMemo(() => {
     if (!content) return [];
     
-    const chartSplitRegex = /(<nsil:chart>[\s\S]*?<\/nsil:chart>)/g;
-    let processedContent = content;
-
-    // NSIL Tag Transformations to HTML
-    // Add handlers for the missing matchmaking and structural tags
-    processedContent = processedContent.replace(/<nsil:match_making_analysis>([\s\S]*?)<\/nsil:match_making_analysis>/g, '$1'); // This is a root tag, just render its content
-    processedContent = processedContent.replace(/<nsil:match>([\s\S]*?)<\/nsil:match>/g, '<div class="nsil-match my-8 p-6 bg-nexus-surface-700/50 border border-nexus-border-medium rounded-xl">$1</div>');
-    processedContent = processedContent.replace(/<nsil:company_profile name="(.*?)" headquarters="(.*?)" website="(.*?)">([\s\S]*?)<\/nsil:company_profile>/g, '<div class="nsil-company-profile mb-4"><h3>$1</h3><p class="text-sm text-nexus-text-secondary"><strong>HQ:</strong> $2 | <a href="$3" target="_blank" rel="noopener noreferrer" class="text-nexus-accent-cyan hover:underline">Website</a></p><div class="mt-2">$4</div></div>');
-    processedContent = processedContent.replace(/<nsil:synergy_analysis>([\s\S]*?)<\/nsil:synergy_analysis>/g, '<div class="nsil-interactive nsil-synergy-analysis mt-4" data-symbiosis-title="Synergy Analysis" data-symbiosis-content="$1"><h4>Synergy Analysis</h4>$1</div>');
-    processedContent = processedContent.replace(/<nsil:strategic_outlook>([\s\S]*?)<\/nsil:strategic_outlook>/g, '<div class="nsil-strategic-outlook mt-6 pt-4 border-t border-nexus-border-medium"><h3>Strategic Outlook</h3>$1</div>');    processedContent = processedContent.replace(/<nsil:executive_summary>([\s\S]*?)<\/nsil:executive_summary>/g, '<div class="nsil-interactive nsil-summary" data-symbiosis-title="Executive Summary" data-symbiosis-content="$1"><h3>Executive Summary</h3>$1</div>');
-    processedContent = processedContent.replace(/<nsil:confidence_flag level="(\w+)" reason="(.*?)">([\s\S]*?)<\/nsil:confidence_flag>/g, (match, level, reason, text) => {
-        return `<span class="nsil-confidence-flag relative group cursor-help border-b-2 border-dashed border-amber-500/50 text-amber-400">
-                    ${text}
-                    <span class="absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full w-max max-w-xs bg-nexus-text-primary text-nexus-primary-900 text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none border border-nexus-border-medium shadow-lg z-10">
-                        <strong class="text-amber-400">AI Confidence Note (${level}):</strong> ${reason}
-                    </span>
-                </span>`;
-    });
-    processedContent = processedContent.replace(/<nsil:match_score value="([\d.]*)">([\s\S]*?)<\/nsil:match_score>/g, '<div class="nsil-score my-6 text-center"><div class="text-6xl font-bold text-nexus-accent-brown">$1</div><p class="text-nexus-text-secondary mt-2">$2</p></div>');
-    processedContent = processedContent.replace(/<nsil:risk_map>([\s\S]*?)<\/nsil:risk_map>/g, '<div class="nsil-riskmap my-6"><h3>Risk & Opportunity Map</h3><div class="grid md:grid-cols-3 gap-4 mt-2">$1</div></div>');
-    processedContent = processedContent.replace(/<nsil:zone color="(\w+)" title="(.*?)">([\s\S]*?)<\/nsil:zone>/g, (match, color, title, text) => {
-        const colorClasses = {
-            green: 'border-green-500 bg-green-900/20',
-            yellow: 'border-yellow-500 bg-yellow-900/20',
-            red: 'border-red-500 bg-red-900/20'
-        }[color] || 'border-gray-500';
-        return `<div class="nsil-interactive nsil-zone border-t-4 ${colorClasses} p-4 rounded-b-lg bg-nexus-surface-800" data-symbiosis-title="Risk Zone: ${title}" data-symbiosis-content="${text}"><h5 class="font-bold text-nexus-text-primary">${title}</h5><p class="text-sm text-nexus-text-secondary mt-1">${text}</p></div>`
-    });    processedContent = processedContent.replace(/<nsil:source_attribution>([\s\S]*?)<\/nsil:source_attribution>/g, '<div class="nsil-source mt-6 pt-4 border-t border-nexus-border-medium"><h3>Source Attribution</h3>$1</div>');
-
-    const parts = processedContent.split(chartSplitRegex);
+    // New: Regex to split content by major NSIL section tags, keeping the tags
+    const sectionSplitRegex = /(<nsil:(?:executive_summary|risk_map|match_making_analysis|source_attribution|chart)>[\s\S]*?<\/nsil:.*?>)/g;
+    const parts = content.split(sectionSplitRegex).filter(part => part.trim() !== '');
 
     return parts.map((part, index) => {
-        if (part.startsWith('<nsil:chart>')) {
-            const json = part.replace(/<\/?nsil:chart>/g, '');
-            return { type: 'chart', content: json, key: `chart-${index}` };
+        const tagMatch = part.match(/<nsil:(\w+)/);
+        const sectionType = tagMatch ? tagMatch[1] : 'default';
+        const title = sectionType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+        let innerContent = part;
+
+        if (sectionType === 'chart') {
+            const json = innerContent.replace(/<\/?nsil:chart>/g, '');
+            return { type: 'chart', title: 'Chart', content: json, key: `part-${index}` };
         }
-        
-        if (!part.trim()) return null;
-        
-        const html = marked.parse(part) as string;
-        return { type: 'html', content: html, key: `html-${index}` };
+
+        // Strip the main section tag for processing inner content
+        innerContent = innerContent.replace(new RegExp(`</?nsil:${sectionType}>`, 'g'), '');
+
+        // NSIL Tag Transformations to HTML for inner content
+        innerContent = innerContent.replace(/<nsil:match>([\s\S]*?)<\/nsil:match>/g, '<div class="nsil-match my-4 p-4 bg-nexus-surface-700/50 border border-nexus-border-medium rounded-xl">$1</div>');
+        innerContent = innerContent.replace(/<nsil:company_profile name="(.*?)" headquarters="(.*?)" website="(.*?)">([\s\S]*?)<\/nsil:company_profile>/g, '<div class="nsil-company-profile mb-4"><h3>$1</h3><p class="text-sm text-nexus-text-secondary"><strong>HQ:</strong> $2 | <a href="$3" target="_blank" rel="noopener noreferrer" class="text-nexus-accent-cyan hover:underline">Website</a></p><div class="mt-2">$4</div></div>');
+        innerContent = innerContent.replace(/<nsil:synergy_analysis>([\s\S]*?)<\/nsil:synergy_analysis>/g, '<div class="nsil-interactive nsil-synergy-analysis mt-4" data-symbiosis-title="Synergy Analysis" data-symbiosis-content="$1"><h4>Synergy Analysis</h4>$1</div>');
+        innerContent = innerContent.replace(/<nsil:strategic_outlook>([\s\S]*?)<\/nsil:strategic_outlook>/g, '<div class="nsil-strategic-outlook mt-4 pt-4 border-t border-nexus-border-medium"><h3>Strategic Outlook</h3>$1</div>');
+        innerContent = innerContent.replace(/<nsil:confidence_flag level="(\w+)" reason="(.*?)">([\s\S]*?)<\/nsil:confidence_flag>/g, (match, level, reason, text) => {
+            return `<span class="nsil-confidence-flag relative group cursor-help border-b-2 border-dashed border-amber-500/50 text-amber-400">
+                        ${text}
+                        <span class="absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full w-max max-w-xs bg-nexus-text-primary text-nexus-primary-900 text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none border border-nexus-border-medium shadow-lg z-10">
+                            <strong class="text-amber-400">AI Confidence Note (${level}):</strong> ${reason}
+                        </span>
+                    </span>`;
+        });
+        innerContent = innerContent.replace(/<nsil:match_score value="([\d.]*)">([\s\S]*?)<\/nsil:match_score>/g, '<div class="nsil-score my-4 text-center"><div class="text-5xl font-bold text-nexus-accent-brown">$1</div><p class="text-nexus-text-secondary mt-1 text-sm">$2</p></div>');
+        innerContent = innerContent.replace(/<nsil:risk_map>([\s\S]*?)<\/nsil:risk_map>/g, '<div class="nsil-riskmap my-4"><h3>Risk & Opportunity Map</h3><div class="grid md:grid-cols-2 gap-4 mt-2">$1</div></div>');
+        innerContent = innerContent.replace(/<nsil:zone color="(\w+)" title="(.*?)">([\s\S]*?)<\/nsil:zone>/g, (match, color, zoneTitle, text) => {
+            const colorClasses = {
+                green: 'border-green-500 bg-green-900/20',
+                yellow: 'border-yellow-500 bg-yellow-900/20',
+                red: 'border-red-500 bg-red-900/20'
+            }[color] || 'border-gray-500';
+            return `<div class="nsil-interactive nsil-zone border-t-4 ${colorClasses} p-4 rounded-b-lg bg-nexus-surface-800" data-symbiosis-title="Risk Zone: ${zoneTitle}" data-symbiosis-content="${text}"><h5 class="font-bold text-nexus-text-primary">${zoneTitle}</h5><p class="text-sm text-nexus-text-secondary mt-1">${text}</p></div>`
+        });
+
+        const html = marked.parse(innerContent) as string;
+        return { type: 'html', title, content: html, key: `part-${index}`, sectionType };
     }).filter(Boolean);
   }, [content]);
 
   return (
     <div>
-        <header className="sticky top-4 z-10 p-2 bg-nexus-surface-800/80 backdrop-blur-xl border-b border-nexus-border-medium flex justify-between items-center flex-shrink-0">
-            <div>
-                <h2 className="text-lg font-bold text-nexus-text-primary truncate pr-4" title={parameters.reportName}>{parameters.reportName || "Strategic Blueprint"}</h2>
-                <p className="text-xs text-nexus-text-secondary">{parameters.region} - {parameters.industry.join(' / ')}</p>
+        <header className="sticky top-0 z-20 bg-nexus-surface-800/80 backdrop-blur-xl border-b border-nexus-border-medium flex-shrink-0">
+            <div className="p-2 flex justify-between items-center">
+                <div>
+                    <h2 className="text-lg font-bold text-nexus-text-primary truncate pr-4" title={parameters.reportName}>{parameters.reportName || "Strategic Blueprint"}</h2>
+                    <p className="text-xs text-nexus-text-secondary">{parameters.region} - {parameters.industry.join(' / ')}</p>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <button
+                        onClick={onGenerateLetter}
+                        className="bg-nexus-accent-cyan text-white font-bold py-1 px-2 rounded-lg hover:bg-nexus-accent-cyan-dark transition-colors flex items-center gap-2 text-xs"
+                    >
+                        <LetterIcon className="w-4 h-4" />
+                        Outreach Letter
+                    </button>
+                    <button
+                        onClick={onReset}
+                        className="nexus-button-secondary text-xs py-1 px-2"
+                    >
+                        New Report
+                    </button>
+                    <button
+                        onClick={handleDownloadPdf}
+                        disabled={isGenerating || isDownloading}
+                        className="bg-nexus-accent-brown text-white font-bold py-1 px-2 rounded-lg hover:bg-nexus-accent-brown-dark transition-all disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2 text-xs"
+                    >
+                        <DownloadIcon className="w-4 h-4" />
+                        {isDownloading ? 'Downloading...' : 'Download PDF'}
+                    </button>
+                </div>
             </div>
-            <div className="flex items-center space-x-2">
-                <button
-                    onClick={onGenerateLetter}
-                    className="bg-nexus-accent-cyan text-white font-bold py-1 px-2 rounded-lg hover:bg-nexus-accent-cyan-dark transition-colors flex items-center gap-2 text-xs"
-                >
-                    <LetterIcon className="w-4 h-4" />
-                    Outreach Letter
-                </button>
-                <button
-                    onClick={onReset}
-                    className="nexus-button-secondary text-xs py-1 px-2"
-                >
-                    New Report
-                </button>
-                <button
-                    onClick={handleDownloadPdf}
-                    disabled={isGenerating || isDownloading}
-                    className="bg-nexus-accent-brown text-white font-bold py-1 px-2 rounded-lg hover:bg-nexus-accent-brown-dark transition-all disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2 text-xs"
-                >
-                    <DownloadIcon className="w-4 h-4" />
-                    {isDownloading ? 'Downloading...' : 'Download PDF'}
-                </button>
-            </div>
+            {/* Step Navigation */}
+            {wizardStep && (
+                <div className="p-2 border-t border-nexus-border-medium bg-nexus-surface-900/50">
+                    <div className="flex items-center justify-between">
+                        <button
+                            onClick={onPrevStep}
+                            disabled={!canGoPrev}
+                            className="px-4 py-2 text-sm bg-nexus-surface-700 text-nexus-text-primary rounded-md hover:bg-nexus-surface-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            ← Back
+                        </button>
+                        <div className="text-center">
+                            <span className="text-sm font-semibold text-nexus-text-primary">
+                                Step {wizardStep} of 12
+                            </span>
+                            <span className="block text-xs text-nexus-text-secondary">
+                                {wizardStep === 1 ? 'Strategic Context' :
+                                 wizardStep === 2 ? 'RROI Analysis' :
+                                 wizardStep === 3 ? 'SEAM Architecture' :
+                                 wizardStep === 4 ? 'Opportunity Identification' :
+                                 wizardStep === 5 ? 'Partner Network Analysis' :
+                                 wizardStep === 6 ? 'Risk Assessment' :
+                                 wizardStep === 7 ? 'Technology Transfer' :
+                                 wizardStep === 8 ? 'Implementation Roadmap' :
+                                 wizardStep === 9 ? 'Resource Allocation' :
+                                 wizardStep === 10 ? 'Performance Metrics' :
+                                 wizardStep === 11 ? 'Sustainability Planning' :
+                                 'Intelligence Dashboard'}
+                            </span>
+                        </div>
+                        <button
+                            onClick={onNextStep}
+                            disabled={!canGoNext}
+                            className="px-4 py-2 text-sm bg-nexus-accent-cyan text-white rounded-md hover:bg-nexus-accent-cyan-dark disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Next →
+                        </button>
+                    </div>
+                </div>
+            )}
         </header>
       <div ref={reportContainerRef} role="document">
         <div className="max-w-3xl mx-auto p-4 md:p-6">
-            <div className="report-document-container shadow-strong text-sm bg-gradient-to-br from-nexus-surface-900 to-nexus-surface-800 border border-nexus-border-medium rounded-xl overflow-hidden">
-                <div className="blueprint-render-area bg-gradient-to-b from-nexus-surface-800 to-nexus-surface-700">
-                    <ReportMetadata parameters={parameters} />
-                    <div className="blueprint-content bg-gradient-to-b from-white/5 to-transparent">
-                        {error && (
-                            <div className="mb-6 p-4 rounded-lg bg-red-900/20 border border-red-500/30 text-red-300 shadow-soft">
-                                <h3 className="font-bold text-base mb-2 flex items-center gap-2">
-                                    <span className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-xs font-bold">!</span>
-                                    Report Generation Error
-                                </h3>
-                                <p className="text-xs">{error}</p>
-                            </div>
-                        )}
-                        <ReportDisclaimer />
+            {/* Old single-column layout removed */}
+            <div className="blueprint-render-area">
+                <ReportMetadata parameters={parameters} />
+                <div className="blueprint-content mt-8">
+                    {error && (
+                        <ReportCard title="Report Generation Error" icon="⚠️" className="col-span-full bg-red-900/20 border-red-500/30 text-red-300">
+                            <p className="text-xs">{error}</p>
+                        </ReportCard>
+                    )}
+                    
+                    <ReportDisclaimer />
 
+                    {/* New Dashboard Grid Layout */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {reportParts.map((part, index) => {
                             if (!part) return null;
-                            if (part.type === 'chart') {
-                                return <NsilChart key={part.key || `chart-${index}`} jsonString={part.content} />;
-                            }
-                            // It's an HTML part
-                            return <div key={part.key || `html-${index}`} dangerouslySetInnerHTML={{ __html: part.content }} className="prose prose-invert max-w-none" />;
+
+                            // Determine column span for certain cards
+                            const isFullWidth = part.sectionType === 'match_making_analysis' || part.sectionType === 'source_attribution';
+
+                            return (
+                                <ReportCard
+                                    key={part.key || `card-${index}`}
+                                    title={part.title}
+                                    icon={SECTION_ICONS[part.sectionType || 'default'] || SECTION_ICONS['default']}
+                                    className={isFullWidth ? 'lg:col-span-2' : ''}
+                                >
+                                    {part.type === 'chart' ? (
+                                        <NsilChart jsonString={part.content} />
+                                    ) : (
+                                        <div dangerouslySetInnerHTML={{ __html: part.content }} className="prose prose-sm prose-invert max-w-none" />
+                                    )}
+                                </ReportCard>
+                            );
                         })}
-
-                        {isGenerating && (
-                            <ReportLoadingIndicator />
-                        )}
-
-                        {!isGenerating && content && <ReportFooter />}
                     </div>
+
+                    {isGenerating && <ReportLoadingIndicator />}
+                    {!isGenerating && content && <ReportFooter />}
                 </div>
             </div>
         </div>

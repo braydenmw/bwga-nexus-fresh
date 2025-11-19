@@ -1,6 +1,6 @@
 import React from 'react';
-import type { ReportParameters } from '../../types';
-import { REGIONS_AND_COUNTRIES, ORGANIZATION_TYPES } from '../constants.tsx';
+import type { ReportParameters } from '../types';
+import { REGIONS_AND_COUNTRIES, ORGANIZATION_TYPES, GOVERNMENT_LEVELS, COUNTRIES } from '../constants.tsx';
 import Card from './common/Card.tsx';
 
 interface ProfileStepProps {
@@ -11,8 +11,12 @@ interface ProfileStepProps {
 }
 
 export const ProfileStep: React.FC<ProfileStepProps> = ({ params, handleChange, inputStyles, labelStyles }) => {
+    // For government organizations, we use government level instead of global regions
+    const isGovernmentOrg = params.organizationType?.includes('Government') ||
+                           params.organizationType === 'Investment Promotion Agency';
+
     const [userRegion, setUserRegion] = React.useState(() => {
-        if (params.userCountry) {
+        if (params.userCountry && !isGovernmentOrg) {
             return REGIONS_AND_COUNTRIES.find(r => r.countries.includes(params.userCountry))?.name || '';
         }
         return '';
@@ -35,18 +39,31 @@ export const ProfileStep: React.FC<ProfileStepProps> = ({ params, handleChange, 
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div><label className={labelStyles}>Organization Type</label><select value={params.organizationType} onChange={e => handleChange('organizationType', e.target.value)} className={inputStyles}>{ORGANIZATION_TYPES.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
-                 <div>
-                    <label className={labelStyles}>Your Region</label>
-                    <select value={userRegion} onChange={e => handleUserRegionChange(e.target.value)} className={inputStyles}>
-                        <option value="">Select Region</option>
-                        {REGIONS_AND_COUNTRIES.map(region => <option key={region.name} value={region.name}>{region.name}</option>)}
-                    </select>
-                </div>
+                 {isGovernmentOrg ? (
+                     <div>
+                        <label className={labelStyles}>Government Level</label>
+                        <select value={params.governmentLevel || ''} onChange={e => handleChange('governmentLevel', e.target.value)} className={inputStyles}>
+                            <option value="">Select Government Level</option>
+                            {GOVERNMENT_LEVELS.map(level => <option key={level} value={level}>{level}</option>)}
+                        </select>
+                    </div>
+                 ) : (
+                     <div>
+                        <label className={labelStyles}>Your Region</label>
+                        <select value={userRegion} onChange={e => handleUserRegionChange(e.target.value)} className={inputStyles}>
+                            <option value="">Select Region</option>
+                            {REGIONS_AND_COUNTRIES.map(region => <option key={region.name} value={region.name}>{region.name}</option>)}
+                        </select>
+                    </div>
+                 )}
                 <div>
                     <label className={labelStyles}>Your Country</label>
-                    <select value={params.userCountry} onChange={e => handleChange('userCountry', e.target.value)} disabled={!userRegion} className={`${inputStyles} disabled:bg-nexus-border-subtle`}>
+                    <select value={params.userCountry} onChange={e => handleChange('userCountry', e.target.value)} disabled={!userRegion && !isGovernmentOrg} className={`${inputStyles} disabled:bg-nexus-border-subtle`}>
                         <option value="">Select Country</option>
-                        {REGIONS_AND_COUNTRIES.find(r => r.name === userRegion)?.countries.map(country => <option key={country} value={country}>{country}</option>)}
+                        {isGovernmentOrg ?
+                            COUNTRIES.map(country => <option key={country} value={country}>{country}</option>) :
+                            REGIONS_AND_COUNTRIES.find(r => r.name === userRegion)?.countries.map(country => <option key={country} value={country}>{country}</option>)
+                        }
                     </select>
                 </div>
                 </div>

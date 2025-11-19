@@ -24,6 +24,8 @@ export interface ReportParameters {
   userDepartment: string;
   organizationType: string;
   userCountry: string;
+  userTier: UserTier;
+  governmentLevel?: string; // For government organizations
   aiPersona: string[];
   customAiPersona?: string;
   analyticalLens?: string[];
@@ -37,6 +39,11 @@ export interface ReportParameters {
   analyticalModules: string[];
   reportLength: ReportLength;
   outputFormat: OutputFormat;
+  // 12-step workflow fields
+  strategicContext?: string;
+  opportunityScore?: OpportunityScore;
+  moduleScore?: ModuleScore;
+  complexityScore?: ComplexityScore;
 }
 
 export type ReportSuggestions = Partial<Pick<ReportParameters, 'reportName' | 'region' | 'problemStatement' | 'idealPartnerProfile' | 'tier' | 'aiPersona'>> & {
@@ -67,11 +74,14 @@ export interface SymbiosisContext {
   reportParameters?: ReportParameters;
 }
 
+export type UserTier = 'basic' | 'professional' | 'enterprise';
+
 export interface UserProfile {
   userName: string;
   userDepartment:string;
   organizationType: string;
   userCountry: string;
+  userTier: UserTier;
 }
 
 export interface ChatMessage {
@@ -254,4 +264,50 @@ export interface NexusBrainState {
   ecosystem: SEAM_Blueprint | null;
   // V2 State
   generativeModel: GenerativeModel | null;
+}
+
+// --- 12-STEP INTELLIGENCE SYSTEM TYPES ---
+
+export interface OpportunityScore {
+  marketPotential: number; // 0-100
+  investmentAttractiveness: number; // 0-100
+  competitiveAdvantage: number; // 0-100
+  riskFactors: number; // 0-100 (lower is better)
+  totalScore: number; // 0-100
+}
+
+export interface ModuleScore {
+  complexityLevel: number; // 0-100
+  resourceRequirements: number; // 0-100
+  implementationTimeline: number; // 0-100 (lower is better)
+  successProbability: number; // 0-100
+  totalScore: number; // 0-100
+}
+
+export interface ComplexityScore {
+  technicalComplexity: number; // 0-100
+  stakeholderInvolvement: number; // 0-100
+  regulatoryCompliance: number; // 0-100
+  marketVolatility: number; // 0-100
+  totalScore: number; // 0-100
+}
+
+export type IntelligenceStep =
+  | 'strategic-context'
+  | 'rroi-analysis'
+  | 'seam-architecture'
+  | 'opportunity-identification'
+  | 'partner-network-analysis'
+  | 'risk-assessment'
+  | 'technology-transfer'
+  | 'implementation-roadmap'
+  | 'resource-allocation'
+  | 'performance-metrics'
+  | 'sustainability-planning'
+  | 'intelligence-dashboard';
+
+export interface WorkflowProgress {
+  currentStep: number; // 1-12
+  completedSteps: IntelligenceStep[];
+  stepData: Record<IntelligenceStep, any>;
 }

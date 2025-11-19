@@ -82,6 +82,12 @@ export const REGIONS_AND_COUNTRIES = [
 
 export const COUNTRIES = REGIONS_AND_COUNTRIES.flatMap(region => region.countries).sort();
 
+export const GOVERNMENT_LEVELS = [
+  "National Government",
+  "Regional/State Government",
+  "City/Local Government",
+  "Municipal Government"
+];
 
 export const INDUSTRIES: { id: string, title: string, icon: React.FC<any> }[] = [
     { id: 'Technology & Innovation', title: 'Tech & Innovation', icon: TechnologyIcon },

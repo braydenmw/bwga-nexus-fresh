@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import type { View, ReportParameters, LiveOpportunityItem, SymbiosisContext, UserProfile as UserProfileType, ChatMessage, ReportSuggestions } from './types.ts';
+import type { View, ReportParameters, LiveOpportunityItem, SymbiosisContext, UserProfile as UserProfileType, ChatMessage, ReportSuggestions, UserTier } from './types.ts';
 import { Header } from './components/Header.tsx';
 
 import { LiveOpportunities } from './components/LiveOpportunities.tsx';
@@ -17,29 +17,38 @@ import { SampleReport } from './components/SampleReport.tsx';
 import { TechnicalManual } from './components/TechnicalManual.tsx';
 import WhoWeAre from './components/WhoWeAre.tsx';
 import TermsAndConditions from './components/TermsAndConditions.tsx';
-import { saveAutoSave, loadAutoSave, clearAutoSave, getSavedReports, saveReport, deleteReport } from './services/storageService.ts';
+import { saveAutoSave, loadAutoSave, clearAutoSave, getSavedReports, saveReport, deleteReport, saveUserProfile, loadUserProfile } from './services/storageService.ts';
 
-const initialReportParams: ReportParameters = {
-    reportName: '',
-    tier: [],
-    userName: '',
-    userDepartment: '',
-    organizationType: ORGANIZATION_TYPES[0],
-    userCountry: '',
-    aiPersona: [AI_PERSONAS[0].id],
-    customAiPersona: '',
-    analyticalLens: [ANALYTICAL_LENSES[0]],
-    toneAndStyle: [TONES_AND_STYLES[0]],
-    region: '',
-    industry: [INDUSTRIES[0].id],
-    customIndustry: '',
-    idealPartnerProfile: '',
-    problemStatement: '',
-    analysisTimeframe: 'Any Time',
-    analyticalModules: [],
-    reportLength: 'standard',
-    outputFormat: 'report',
+const getInitialReportParams = (): ReportParameters => {
+    // Load persisted user profile
+    const savedProfile = loadUserProfile();
+
+    return {
+        reportName: '',
+        tier: [],
+        userName: savedProfile?.userName || '',
+        userDepartment: savedProfile?.userDepartment || '',
+        organizationType: savedProfile?.organizationType || ORGANIZATION_TYPES[0],
+        userCountry: savedProfile?.userCountry || '',
+        userTier: (savedProfile?.userTier as UserTier) || 'basic',
+        governmentLevel: savedProfile?.governmentLevel || '',
+        aiPersona: [AI_PERSONAS[0].id],
+        customAiPersona: '',
+        analyticalLens: [ANALYTICAL_LENSES[0]],
+        toneAndStyle: [TONES_AND_STYLES[0]],
+        region: '',
+        industry: [INDUSTRIES[0].id],
+        customIndustry: '',
+        idealPartnerProfile: '',
+        problemStatement: '',
+        analysisTimeframe: 'Any Time',
+        analyticalModules: [],
+        reportLength: 'standard',
+        outputFormat: 'report',
+    };
 };
+
+const initialReportParams: ReportParameters = getInitialReportParams();
 
 function App() {
   const [currentView, setCurrentView] = useState<View>('who-we-are');
@@ -57,6 +66,9 @@ function App() {
   const [savedReports, setSavedReports] = useState<ReportParameters[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Wizard step state for 12-step workflow
+  const [currentWizardStep, setCurrentWizardStep] = useState<number>(1);
+
   // State for modals and shared context
   const [symbiosisContext, setSymbiosisContext] = useState<SymbiosisContext | null>(null);
   const [analysisItem, setAnalysisItem] = useState<LiveOpportunityItem | null>(null);
@@ -67,18 +79,34 @@ function App() {
 
   // Initial load
   useEffect(() => {
-    // Per user request, clear any auto-saved work from previous sessions
-    // to ensure the report generator starts fresh every time.
+    // Clear only report-specific auto-saved work, preserve user profile
     clearAutoSave();
     setSavedReports(getSavedReports());
   }, []);
 
-  // Auto-save on param change
+  // Auto-save on param change (only report-specific data)
   useEffect(() => {
     if (JSON.stringify(reportParams) !== JSON.stringify(initialReportParams)) {
       saveAutoSave(reportParams);
     }
   }, [reportParams]);
+
+  // Save user profile when profile fields change
+  useEffect(() => {
+    const profileFields = {
+      userName: reportParams.userName,
+      userDepartment: reportParams.userDepartment,
+      organizationType: reportParams.organizationType,
+      userCountry: reportParams.userCountry,
+      userTier: reportParams.userTier,
+      governmentLevel: reportParams.governmentLevel
+    };
+
+    // Only save if we have meaningful profile data
+    if (profileFields.userName.trim() || profileFields.organizationType !== ORGANIZATION_TYPES[0]) {
+      saveUserProfile(profileFields);
+    }
+  }, [reportParams.userName, reportParams.userDepartment, reportParams.organizationType, reportParams.userCountry, reportParams.userTier, reportParams.governmentLevel]);
 
   // Toast message handler
   useEffect(() => {
@@ -127,6 +155,7 @@ function App() {
     setReportContent('');
     setReportError(null);
     setReportParams(initialReportParams);
+    setCurrentWizardStep(1); // Reset wizard to step 1
     clearAutoSave();
     setToastMessage("New blueprint started.");
   }, []);
@@ -206,6 +235,18 @@ function App() {
     setLetterModalOpen(true);
   }, []);
 
+  // Wizard step handlers
+  const handleNextStep = useCallback(() => {
+    setCurrentWizardStep(prev => Math.min(prev + 1, 12));
+  }, []);
+
+  const handlePrevStep = useCallback(() => {
+    setCurrentWizardStep(prev => Math.max(prev - 1, 1));
+  }, []);
+
+  const canGoNext = currentWizardStep < 12;
+  const canGoPrev = currentWizardStep > 1;
+
   const renderCurrentView = () => {
     switch (currentView) {
       case 'sample-report':
@@ -244,6 +285,11 @@ function App() {
                     onStartSymbiosis={handleStartSymbiosis}
                     onGenerateLetter={handleGenerateLetter}
                     error={reportError}
+                    wizardStep={currentWizardStep}
+                    onNextStep={handleNextStep}
+                    onPrevStep={handlePrevStep}
+                    canGoNext={canGoNext}
+                    canGoPrev={canGoPrev}
                   />
                 </div>
               </div>
@@ -261,6 +307,11 @@ function App() {
                 onLoadReport={handleLoadReport}
                 onDeleteReport={handleDeleteReport}
                 onScopeComplete={() => {}} // This is handled inside ReportGenerator now
+                wizardStep={currentWizardStep}
+                onNextStep={handleNextStep}
+                onPrevStep={handlePrevStep}
+                canGoNext={canGoNext}
+                canGoPrev={canGoPrev}
               />
             )}
           </div>
